@@ -15,20 +15,13 @@ def export_resnet18():
         model,
         dummy_input,
         "../models/resnet18.onnx",
-        opset_version=11,          # 算子集版本不变
+        opset_version=11,           # 算子集版本
+        ir_version=9,               # 降低 IR 版本以兼容 ONNX Runtime 1.15
         input_names=['input'],
         output_names=['output'],
-        dynamic_axes=None,
-        # 关键修复：强制设置 IR 版本为 9
-        do_constant_folding=True,
-        export_params=True,
-        verbose=False,
-        training=torch.onnx.TrainingMode.EVAL,
-        operator_export_type=torch.onnx.OperatorExportTypes.ONNX,
-        opset_version=11,          # 这里重复是为了确保参数位置正确
-        ir_version=9               # 新增参数，降低 IR 版本
+        dynamic_axes=None
     )
     print("Model exported successfully to models/resnet18.onnx")
 
 if __name__ == "__main__":
-    export_resnet18() 
+    export_resnet18()
