@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  cpp-backend:
+    build:
+      context: ./cpp-backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./models:/app/models
+    networks:
+      - inference-net
+    restart: unless-stopped
+
+  python-backend:
+    build:
+      context: ./python-backend
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    networks:
+      - inference-net
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8082:80"
+    networks:
+      - inference-net
+    depends_on:
+      - cpp-backend
+      - python-backend
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - inference-net
+    depends_on:
+      - cpp-backend
+      - python-backend
+      - frontend
+    restart: unless-stopped
+
+networks:
+  inference-net:
+    driver: bridge
