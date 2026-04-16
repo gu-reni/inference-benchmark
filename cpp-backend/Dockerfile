@@ -1,6 +1,10 @@
 # 多阶段构建：编译阶段
 FROM ubuntu:20.04 as builder
 
+# 替换为阿里云镜像源（解决国内 apt 超时问题）
+RUN sed -i 's/archive.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list && \
+    sed -i 's/security.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list
+
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -31,6 +35,10 @@ RUN mkdir build && cd build \
 # 运行阶段
 FROM ubuntu:20.04 as runtime
 
+# 同样替换源
+RUN sed -i 's/archive.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list && \
+    sed -i 's/security.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list
+
 RUN apt-get update && apt-get install -y \
     libopencv-core4.2 \
     libopencv-imgcodecs4.2 \
@@ -42,11 +50,11 @@ WORKDIR /app
 # 从编译阶段复制必要文件
 COPY --from=builder /usr/local/lib/libonnxruntime.so /usr/local/lib/
 COPY --from=builder /app/build/bin/inference_server /app/
-COPY ../models /app/models
 
 # 更新动态库缓存
 RUN ldconfig
 
 EXPOSE 8080
 
-CMD ["/app/inference_server", "/app/models/resnet18.onnx"]
+# 模型文件通过 docker-compose 卷挂载，路径为 /app/models/resnet18_ir9.onnx
+CMD ["/app/inference_server", "/app/models/resnet18_ir9.onnx"]
