@@ -31,4 +31,4 @@ def export_resnet18():
     print("Model exported successfully to models/resnet18.onnx")
 
 if __name__ == "__main__":
-    export_resnet18()
+    export_resnet18() 
