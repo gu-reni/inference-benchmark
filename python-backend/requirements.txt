@@ -1,5 +1,6 @@
 flask>=2.3.0
+--index-url https://download.pytorch.org/whl/cpu
 torch>=2.0.0
 torchvision>=0.15.0
-opencv-python>=4.8.0.74   # 使用实际存在的版本号
+opencv-python>=4.8.0.74
 numpy>=1.24.0
