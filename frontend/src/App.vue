@@ -1,43 +1,93 @@
 <template>
   <div id="app">
-    <h1>🔥 C++ vs Python 推理性能对比</h1>
-    
-    <div class="upload-section">
-      <input type="file" @change="handleFileUpload" accept="image/*" />
-      <button @click="runBenchmark" :disabled="!uploadedImage">开始对比</button>
-    </div>
-    
-    <div v-if="imagePreview" class="preview">
-      <img :src="imagePreview" alt="Preview" />
-    </div>
-    
-    <div v-if="cppResult && pythonResult" class="results">
-      <PerformanceChart 
-        :cppTime="cppResult.inference_time_us / 1000"
-        :pythonTime="pythonResult.inference_time_us / 1000"
-      />
-      
-      <div class="comparison-table">
-        <h3>推理结果 (Top5 Logits)</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>排名</th>
-              <th>C++</th>
-              <th>Python</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="i in 5" :key="i">
-              <td>#{{ i }}</td>
-              <td>{{ formatLogit(cppResult.top5[i-1]) }}</td>
-              <td>{{ formatLogit(pythonResult.top5[i-1]) }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <p class="note">注：由于浮点运算差异，数值可能略有不同</p>
+    <header class="hero">
+      <h1>🚀 推理性能对比</h1>
+      <p class="subtitle">C++ ONNX Runtime vs Python PyTorch</p>
+    </header>
+
+    <main class="container">
+      <!-- 上传区域 -->
+      <div class="upload-card">
+        <div class="upload-area" @click="$refs.fileInput.click()">
+          <input
+            ref="fileInput"
+            type="file"
+            accept="image/*"
+            @change="handleFileUpload"
+            style="display: none"
+          />
+          <div v-if="!imagePreview" class="upload-placeholder">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            <span>点击或拖拽上传图片</span>
+            <small>支持 JPG、PNG 格式，建议尺寸 224x224</small>
+          </div>
+          <img v-else :src="imagePreview" class="preview-image" />
+        </div>
+        <button class="compare-btn" @click="runBenchmark" :disabled="!uploadedImage || loading">
+          <span v-if="!loading">开始对比</span>
+          <span v-else>推理中...</span>
+        </button>
       </div>
-    </div>
+
+      <!-- 结果展示 -->
+      <div v-if="cppResult && pythonResult" class="results-section">
+        <div class="cards-grid">
+          <!-- C++ 卡片 -->
+          <div class="result-card cpp">
+            <div class="card-header">
+              <span class="badge">C++</span>
+              <span class="time">{{ (cppResult.inference_time_us / 1000).toFixed(2) }} ms</span>
+            </div>
+            <div class="speed-indicator">
+              <div class="bar" :style="{ width: speedRatio + '%' }"></div>
+            </div>
+            <div class="tag">⚡ 基准性能</div>
+          </div>
+
+          <!-- Python 卡片 -->
+          <div class="result-card python">
+            <div class="card-header">
+              <span class="badge">Python</span>
+              <span class="time">{{ (pythonResult.inference_time_us / 1000).toFixed(2) }} ms</span>
+            </div>
+            <div class="speed-indicator">
+              <div class="bar" :style="{ width: '100%' }"></div>
+            </div>
+            <div class="tag">🐍 对比基准</div>
+          </div>
+        </div>
+
+        <!-- 图表组件 -->
+        <PerformanceChart
+          :cppTime="cppResult.inference_time_us / 1000"
+          :pythonTime="pythonResult.inference_time_us / 1000"
+        />
+
+        <!-- 结果表格 -->
+        <div class="results-table-wrapper">
+          <h3>📊 推理结果对比 (Top5 Logits)</h3>
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th>排名</th>
+                <th>C++ (ONNX Runtime)</th>
+                <th>Python (PyTorch)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="i in 5" :key="i">
+                <td class="rank">#{{ i }}</td>
+                <td>{{ formatLogit(cppResult.top5[i-1]) }}</td>
+                <td>{{ formatLogit(pythonResult.top5[i-1]) }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="footnote">注：数值为原始 logits，因浮点运算差异略有不同属正常现象</p>
+        </div>
+      </div>
+    </main>
   </div>
 </template>
 
@@ -47,33 +97,40 @@ import axios from 'axios'
 
 export default {
   name: 'App',
-  components: {
-    PerformanceChart
-  },
+  components: { PerformanceChart },
   data() {
     return {
       uploadedImage: null,
       imagePreview: null,
       cppResult: null,
-      pythonResult: null
+      pythonResult: null,
+      loading: false
+    }
+  },
+  computed: {
+    speedRatio() {
+      if (!this.cppResult || !this.pythonResult) return 0
+      return (this.cppResult.inference_time_us / this.pythonResult.inference_time_us) * 100
     }
   },
   methods: {
     handleFileUpload(event) {
       const file = event.target.files[0]
+      if (!file) return
       this.uploadedImage = file
       this.imagePreview = URL.createObjectURL(file)
+      // 清空旧结果
+      this.cppResult = null
+      this.pythonResult = null
     },
-    
     async runBenchmark() {
       if (!this.uploadedImage) return
-      
-      // 读取文件为 ArrayBuffer
+      this.loading = true
+
       const buffer = await this.uploadedImage.arrayBuffer()
       const uint8Array = new Uint8Array(buffer)
-      
+
       try {
-        // 并发请求 C++ 和 Python 服务
         const [cppRes, pythonRes] = await Promise.all([
           axios.post('/api/cpp/inference', uint8Array, {
             headers: { 'Content-Type': 'application/octet-stream' }
@@ -82,15 +139,15 @@ export default {
             headers: { 'Content-Type': 'application/octet-stream' }
           })
         ])
-        
         this.cppResult = cppRes.data
         this.pythonResult = pythonRes.data
       } catch (error) {
         console.error('请求失败:', error)
         alert('推理服务请求失败，请检查后端是否启动')
+      } finally {
+        this.loading = false
       }
     },
-    
     formatLogit(value) {
       return value ? value.toFixed(4) : 'N/A'
     }
@@ -99,45 +156,259 @@ export default {
 </script>
 
 <style>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  color: #1e293b;
+}
+
 #app {
-  font-family: Arial, sans-serif;
-  max-width: 900px;
+  padding: 2rem 1rem;
+}
+
+.hero {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.hero h1 {
+  font-size: 3rem;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  letter-spacing: -0.025em;
+}
+
+.subtitle {
+  font-size: 1.2rem;
+  color: rgba(255, 255, 255, 0.9);
+  margin-top: 0.5rem;
+}
+
+.container {
+  max-width: 1000px;
   margin: 0 auto;
-  padding: 20px;
 }
 
-.upload-section {
-  margin: 20px 0;
+.upload-card {
+  background: white;
+  border-radius: 24px;
+  padding: 2rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  margin-bottom: 2rem;
 }
 
-.preview img {
-  max-width: 300px;
+.upload-area {
+  border: 3px dashed #cbd5e1;
+  border-radius: 16px;
+  padding: 3rem 2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.upload-area:hover {
+  border-color: #667eea;
+  background: #f8fafc;
+}
+
+.upload-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  color: #64748b;
+}
+
+.upload-placeholder svg {
+  stroke: #94a3b8;
+}
+
+.upload-placeholder span {
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: #334155;
+}
+
+.upload-placeholder small {
+  font-size: 0.875rem;
+}
+
+.preview-image {
+  max-width: 100%;
   max-height: 300px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  border-radius: 12px;
+  object-fit: contain;
 }
 
-.comparison-table {
-  margin-top: 30px;
+.compare-btn {
+  display: block;
+  width: 100%;
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
 }
 
-table {
+.compare-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px -5px rgba(102, 126, 234, 0.4);
+}
+
+.compare-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.results-section {
+  background: white;
+  border-radius: 24px;
+  padding: 2rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.cards-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-bottom: 2.5rem;
+}
+
+.result-card {
+  padding: 1.5rem;
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+.result-card.cpp {
+  border-left: 6px solid #3b82f6;
+}
+
+.result-card.python {
+  border-left: 6px solid #ef4444;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.badge {
+  font-size: 1.25rem;
+  font-weight: 700;
+  padding: 0.25rem 0.75rem;
+  border-radius: 30px;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.result-card.cpp .badge {
+  color: #2563eb;
+}
+
+.result-card.python .badge {
+  color: #dc2626;
+}
+
+.time {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.speed-indicator {
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 10px;
+  margin: 1rem 0;
+  overflow: hidden;
+}
+
+.speed-indicator .bar {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #34d399);
+  border-radius: 10px;
+  transition: width 0.5s ease;
+}
+
+.result-card.python .speed-indicator .bar {
+  background: #94a3b8;
+}
+
+.tag {
+  text-align: right;
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+.results-table-wrapper {
+  margin-top: 2.5rem;
+}
+
+.results-table-wrapper h3 {
+  margin-bottom: 1rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.results-table {
   width: 100%;
   border-collapse: collapse;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -4px rgba(0,0,0,0.1);
 }
 
-th, td {
-  border: 1px solid #ddd;
-  padding: 8px;
+.results-table th {
+  background: #f1f5f9;
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #475569;
+}
+
+.results-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.results-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.rank {
+  font-weight: 600;
+  color: #64748b;
+}
+
+.footnote {
+  margin-top: 1rem;
+  font-size: 0.875rem;
+  color: #94a3b8;
   text-align: center;
 }
 
-th {
-  background-color: #f2f2f2;
-}
-
-.note {
-  color: #666;
-  font-size: 0.9em;
+@media (max-width: 640px) {
+  .hero h1 {
+    font-size: 2rem;
+  }
+  .cards-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
