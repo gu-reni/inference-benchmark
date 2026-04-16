@@ -1,0 +1,12 @@
+# Python 虚拟环境
+python-backend/venv/
+__pycache__/
+*.pyc
+
+# 前端依赖
+frontend/node_modules/
+frontend/dist/
+
+# 编译和构建产物
+cpp-backend/build/
+*.log
