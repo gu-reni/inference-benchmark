@@ -124,6 +124,7 @@ export default {
       try {
         const response = await fetch('/imagenet_classes.json')
         this.imagenetClasses = await response.json()
+        console.log('ImageNet classes loaded, length:', this.imagenetClasses.length)
       } catch (error) {
         console.error('Failed to load ImageNet classes:', error)
         this.imagenetClasses = []
@@ -133,7 +134,7 @@ export default {
       if (this.imagenetClasses.length > 0 && index >= 0 && index < this.imagenetClasses.length) {
         return this.imagenetClasses[index]
       }
-      return `类别 ${index}`
+      return `索引 ${index}`
     },
     softmax(logits) {
       const max = Math.max(...logits)
@@ -172,10 +173,15 @@ export default {
         this.cppResult = cppRes.data
         this.pythonResult = pythonRes.data
 
+        // 直接使用返回的索引，不做偏移
         this.cppTopIndices = cppRes.data.top5_indices
         this.cppTopProbs = this.softmax(cppRes.data.top5_values)
         this.pythonTopIndices = pythonRes.data.top5_indices
         this.pythonTopProbs = this.softmax(pythonRes.data.top5_values)
+
+        // 调试输出：检查索引和对应标签
+        console.log('C++ top5 indices:', this.cppTopIndices)
+        console.log('First label:', this.getLabel(this.cppTopIndices[0]))
       } catch (error) {
         console.error('请求失败:', error)
         alert('推理服务请求失败，请检查后端是否启动')
