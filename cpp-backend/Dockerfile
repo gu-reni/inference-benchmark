@@ -45,6 +45,12 @@ RUN apt-get update && apt-get install -y \
     libopencv-imgproc4.2 \
     && rm -rf /var/lib/apt/lists/*
 
+    RUN apt-get update && apt-get install -y \
+    libopencv-core4.2 \
+    libopencv-imgcodecs4.2 \
+    libopencv-imgproc4.2 \
+    libopencv-dnn4.2 \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # 从编译阶段复制必要文件
