@@ -42,6 +42,15 @@ std::tuple<std::vector<float>, std::vector<int>, long long> InferenceEngine::inf
     
     blob = cv::dnn::blobFromImage(rgb_img);
     
+    float mean[3] = {0.485f, 0.456f, 0.406f};
+    float std[3] = {0.229f, 0.224f, 0.225f};
+    float* data = blob.ptr<float>();
+    for (int c = 0; c < 3; ++c) {
+        for (int i = 0; i < input_height * input_width; ++i) {
+            data[c * input_height * input_width + i] = (data[c * input_height * input_width + i] - mean[c]) / std[c];
+        }
+    }
+    
     std::vector<int64_t> input_shape = {batch_size, channels, input_height, input_width};
     size_t input_tensor_size = batch_size * channels * input_height * input_width;
     
