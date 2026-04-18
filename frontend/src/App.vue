@@ -6,7 +6,6 @@
     </header>
 
     <main class="container">
-      <!-- 上传区域 -->
       <div class="upload-card">
         <div class="upload-area" @click="$refs.fileInput.click()">
           <input
@@ -31,10 +30,8 @@
         </button>
       </div>
 
-      <!-- 结果展示 -->
       <div v-if="cppResult && pythonResult" class="results-section">
         <div class="cards-grid">
-          <!-- C++ 卡片 -->
           <div class="result-card cpp">
             <div class="card-header">
               <span class="badge">C++</span>
@@ -46,7 +43,6 @@
             <div class="tag">⚡ 基准性能</div>
           </div>
 
-          <!-- Python 卡片 -->
           <div class="result-card python">
             <div class="card-header">
               <span class="badge">Python</span>
@@ -59,32 +55,34 @@
           </div>
         </div>
 
-        <!-- 图表组件 -->
         <PerformanceChart
           :cppTime="cppResult.inference_time_us / 1000"
           :pythonTime="pythonResult.inference_time_us / 1000"
         />
 
-        <!-- 结果表格 -->
         <div class="results-table-wrapper">
-          <h3>📊 推理结果对比 (Top5 Logits)</h3>
+          <h3>📊 推理结果对比</h3>
           <table class="results-table">
             <thead>
               <tr>
                 <th>排名</th>
-                <th>C++ (ONNX Runtime)</th>
-                <th>Python (PyTorch)</th>
+                <th>C++ 预测类别</th>
+                <th>C++ 置信度</th>
+                <th>Python 预测类别</th>
+                <th>Python 置信度</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="i in 5" :key="i">
                 <td class="rank">#{{ i }}</td>
-                <td>{{ formatLogit(cppResult.top5[i-1]) }}</td>
-                <td>{{ formatLogit(pythonResult.top5[i-1]) }}</td>
+                <td>{{ getLabel(cppTopIndices[i-1]) }}</td>
+                <td>{{ formatConfidence(cppTopProbs[i-1]) }}</td>
+                <td>{{ getLabel(pythonTopIndices[i-1]) }}</td>
+                <td>{{ formatConfidence(pythonTopProbs[i-1]) }}</td>
               </tr>
             </tbody>
           </table>
-          <p class="footnote">注：数值为原始 logits，因浮点运算差异略有不同属正常现象</p>
+          <p class="footnote">注：置信度已通过 Softmax 归一化，因浮点运算差异略有不同属正常现象</p>
         </div>
       </div>
     </main>
@@ -104,7 +102,12 @@ export default {
       imagePreview: null,
       cppResult: null,
       pythonResult: null,
-      loading: false
+      loading: false,
+      imagenetClasses: [],
+      cppTopIndices: [],
+      pythonTopIndices: [],
+      cppTopProbs: [],
+      pythonTopProbs: []
     }
   },
   computed: {
@@ -113,13 +116,39 @@ export default {
       return (this.cppResult.inference_time_us / this.pythonResult.inference_time_us) * 100
     }
   },
+  mounted() {
+    this.loadImageNetClasses()
+  },
   methods: {
+    async loadImageNetClasses() {
+      try {
+        const response = await fetch('/imagenet_classes.json')
+        this.imagenetClasses = await response.json()
+      } catch (error) {
+        console.error('Failed to load ImageNet classes:', error)
+        this.imagenetClasses = []
+      }
+    },
+    getLabel(index) {
+      if (this.imagenetClasses.length > 0 && index >= 0 && index < this.imagenetClasses.length) {
+        return this.imagenetClasses[index]
+      }
+      return `类别 ${index}`
+    },
+    softmax(logits) {
+      const max = Math.max(...logits)
+      const exp = logits.map(x => Math.exp(x - max))
+      const sum = exp.reduce((a, b) => a + b, 0)
+      return exp.map(x => x / sum)
+    },
+    formatConfidence(value) {
+      return (value * 100).toFixed(2) + '%'
+    },
     handleFileUpload(event) {
       const file = event.target.files[0]
       if (!file) return
       this.uploadedImage = file
       this.imagePreview = URL.createObjectURL(file)
-      // 清空旧结果
       this.cppResult = null
       this.pythonResult = null
     },
@@ -139,17 +168,20 @@ export default {
             headers: { 'Content-Type': 'application/octet-stream' }
           })
         ])
+
         this.cppResult = cppRes.data
         this.pythonResult = pythonRes.data
+
+        this.cppTopIndices = cppRes.data.top5_indices
+        this.cppTopProbs = this.softmax(cppRes.data.top5_values)
+        this.pythonTopIndices = pythonRes.data.top5_indices
+        this.pythonTopProbs = this.softmax(pythonRes.data.top5_values)
       } catch (error) {
         console.error('请求失败:', error)
         alert('推理服务请求失败，请检查后端是否启动')
       } finally {
         this.loading = false
       }
-    },
-    formatLogit(value) {
-      return value ? value.toFixed(4) : 'N/A'
     }
   }
 }

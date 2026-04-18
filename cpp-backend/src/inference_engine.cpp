@@ -1,40 +1,36 @@
 #include "inference_engine.h"
 #include <iostream>
 #include <cassert>
-#include <thread>   // 必须包含以使用 std::thread
+#include <thread>
+#include <algorithm>
+#include <numeric>
 
 InferenceEngine::InferenceEngine(const std::string& model_path)
     : env(ORT_LOGGING_LEVEL_WARNING, "InferenceEngine"),
       session(nullptr),
       memory_info(nullptr) {
     
-    // 1. 创建 SessionOptions 对象 (注意不是 Session)
     Ort::SessionOptions session_options;
     
-    // 2. 设置线程数
     int num_cores = std::thread::hardware_concurrency();
-    if (num_cores > 4) num_cores = num_cores / 2;  // 简单处理超线程
+    if (num_cores > 4) num_cores = num_cores / 2;
     session_options.SetIntraOpNumThreads(num_cores);
     std::cout << "Set IntraOp threads: " << num_cores << std::endl;
     
-    // 3. 开启图优化
     session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
     
-    // 4. 创建 CPU 内存信息对象
     memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
     
-    // 5. 加载模型
     try {
         session = Ort::Session(env, model_path.c_str(), session_options);
         std::cout << "Model loaded successfully: " << model_path << std::endl;
-    } catch (const Ort::Exception& e) {  // 注意 const 拼写
+    } catch (const Ort::Exception& e) {
         std::cerr << "Failed to load model: " << e.what() << std::endl;
         throw;
     }
 }
 
-std::pair<std::vector<float>, long long> InferenceEngine::infer(const cv::Mat& img) {
-    // 1. 预处理
+std::tuple<std::vector<float>, std::vector<int>, long long> InferenceEngine::infer(const cv::Mat& img) {
     cv::Mat resized, float_img, rgb_img, blob;
     cv::resize(img, resized, cv::Size(input_width, input_height));
     resized.convertTo(float_img, CV_32FC3, 1.0 / 255.0);
@@ -46,7 +42,6 @@ std::pair<std::vector<float>, long long> InferenceEngine::infer(const cv::Mat& i
     
     blob = cv::dnn::blobFromImage(rgb_img);
     
-    // 2. 创建输入 Tensor (零拷贝)
     std::vector<int64_t> input_shape = {batch_size, channels, input_height, input_width};
     size_t input_tensor_size = batch_size * channels * input_height * input_width;
     
@@ -58,7 +53,6 @@ std::pair<std::vector<float>, long long> InferenceEngine::infer(const cv::Mat& i
         input_shape.size()
     );
     
-    // 3. 推理计时
     std::vector<Ort::Value> output_tensors;
     auto start = std::chrono::high_resolution_clock::now();
     
@@ -76,12 +70,21 @@ std::pair<std::vector<float>, long long> InferenceEngine::infer(const cv::Mat& i
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
     
-    // 4. 提取结果
     float* output_data = output_tensors[0].GetTensorMutableData<float>();
     auto output_shape = output_tensors[0].GetTensorTypeAndShapeInfo().GetShape();
     size_t output_count = output_shape[1];
     
     std::vector<float> results(output_data, output_data + output_count);
+    std::vector<int> indices(results.size());
+    std::iota(indices.begin(), indices.end(), 0);
+    std::partial_sort(indices.begin(), indices.begin() + 5, indices.end(),
+                      [&](int a, int b) { return results[a] > results[b]; });
     
-    return {results, duration};
+    std::vector<int> top5_indices(indices.begin(), indices.begin() + 5);
+    std::vector<float> top5_values;
+    for (int idx : top5_indices) {
+        top5_values.push_back(results[idx]);
+    }
+    
+    return {top5_values, top5_indices, duration};
 }
