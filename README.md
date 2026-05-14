@@ -29,7 +29,7 @@
 ## 🏛️ 系统架构
 
 ```
-用户浏览器 (http://47.95.252.95)
+用户浏览器 
                 │
                 ▼
         ┌───────────────┐
@@ -62,7 +62,7 @@
 ### 一键部署
 
 ```bash
-git clone https://github.com/yourusername/inference-benchmark.git
+git clone https://github.com/gu-reni/inference-benchmark.git
 cd inference-benchmark
 docker-compose up -d --build
 ```
