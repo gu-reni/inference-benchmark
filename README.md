@@ -1,4 +1,3 @@
-根据你的实测数据，以下是一份专业、不夸大的 README 文档，直接复制使用即可。
 
 ---
 
@@ -178,9 +177,7 @@ chmod +x benchmark_full.sh
 - [ ] 集成 Prometheus + Grafana 监控
 - [ ] 评估 INT8 量化对精度和速度的影响
 
-## 📄 开源协议
 
-MIT License
 
 ---
 
